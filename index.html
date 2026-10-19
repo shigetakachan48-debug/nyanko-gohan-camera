@@ -340,7 +340,8 @@
         if (data && data.person) {
           snackCount++;
           details.innerHTML = `
-            <div class="font-bold text-pink-900">${data.person} (${data.time \vert{}\vert{} ''})</div>${data.note ? `<div class="text-[9px] italic text-amber-700 truncate">${data.note}</div>` : ''}
+            <div class="font-bold text-pink-900">${data.person} (${data.time || ''})</div>
+            ${data.note ? `<div class="text-[9px] italic text-amber-700 truncate">${data.note}</div>` : ''}
             ${data.photo ? `<img src="${data.photo}" class="mt-1 mx-auto h-12 w-full object-cover rounded-lg border border-pink-200">` : ''}
           `;
           btn.innerText = "変更";
@@ -367,7 +368,8 @@
         badge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300";
         badge.innerText = "完了";
         details.innerHTML = `
-          <p class="font-bold text-amber-900"><i class="fa-solid fa-user mr-1 text-amber-600"></i>${data.person} <span class="text-amber-700/70 text-[11px] font-normal">(${data.time \vert{}\vert{} ''})</span></p>${data.note ? `<p class="italic text-amber-600 bg-amber-100/50 p-1 rounded mt-0.5 text-[11px]">${data.note}</p>` : ''}
+          <p class="font-bold text-amber-900"><i class="fa-solid fa-user mr-1 text-amber-600"></i>${data.person} <span class="text-amber-700/70 text-[11px] font-normal">(${data.time || ''})</span></p>
+          ${data.note ? `<p class="italic text-amber-600 bg-amber-100/50 p-1 rounded mt-0.5 text-[11px]">${data.note}</p>` : ''}
           ${data.photo ? `<img src="${data.photo}" class="mt-1 mx-auto h-20 w-full object-cover rounded-xl border border-emerald-200 shadow-sm">` : ''}
         `;
         btn.innerText = "変更・削除";
@@ -408,4 +410,252 @@
       familyMembers.forEach((m, idx) => {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = `py-1.5 px-2
+        btn.className = `py-1.5 px-2 rounded-xl text-xs font-bold border transition ${idx === 0 ? 'bg-amber-400 text-white border-amber-400' : 'bg-amber-50/50 text-amber-800 border-amber-200 hover:bg-amber-100'}`;
+        btn.innerText = m;
+        btn.onclick = () => {
+          Array.from(selector.children).forEach(c => c.className = 'py-1.5 px-2 rounded-xl text-xs font-bold border transition bg-amber-50/50 text-amber-800 border-amber-200 hover:bg-amber-100');
+          btn.className = 'py-1.5 px-2 rounded-xl text-xs font-bold border transition bg-amber-400 text-white border-amber-400';
+          selectedFamilyMember = m;
+        };
+        selector.appendChild(btn);
+      });
+
+      const now = new Date();
+      document.getElementById('mealTimeInput').value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      
+      const selectedKey = getFormattedDate(selectedDate);
+      let keyType = 'morning';
+      if (type === '夕') keyType = 'evening';
+      if (type === 'おやつ1') keyType = 'snack1';
+      if (type === 'おやつ2') keyType = 'snack2';
+      if (type === 'おやつ3') keyType = 'snack3';
+
+      const existing = mealsData[selectedKey] ? mealsData[selectedKey][keyType] : null;
+
+      if (existing) {
+        document.getElementById('mealTimeInput').value = existing.time || '';
+        document.getElementById('mealNoteInput').value = existing.note || '';
+        document.getElementById('deleteMealBtn').classList.remove('hidden');
+        selectedFamilyMember = existing.person;
+        
+        if (existing.photo) {
+          uploadedPhotoData = existing.photo;
+          document.getElementById('photoPreview').src = existing.photo;
+          document.getElementById('photoPreviewContainer').classList.remove('hidden');
+        }
+
+        Array.from(selector.children).forEach(btn => {
+          if (btn.innerText === existing.person) {
+            btn.className = 'py-1.5 px-2 rounded-xl text-xs font-bold border transition bg-amber-400 text-white border-amber-400';
+          }
+        });
+      } else {
+        document.getElementById('mealNoteInput').value = '';
+        document.getElementById('deleteMealBtn').classList.add('hidden');
+      }
+
+      document.getElementById('mealModal').classList.remove('hidden');
+    }
+
+    function previewImage(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          const MAX_SIZE = 400; // さらに軽量化してエラーを完全に防止
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_SIZE) {
+              height *= MAX_SIZE / width;
+              width = MAX_SIZE;
+            }
+          } else {
+            if (height > MAX_SIZE) {
+              width *= MAX_SIZE / height;
+              height = MAX_SIZE;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          uploadedPhotoData = canvas.toDataURL('image/jpeg', 0.6); // 画質を少し調整して超軽量化
+
+          document.getElementById('photoPreview').src = uploadedPhotoData;
+          document.getElementById('photoPreviewContainer').classList.remove('hidden');
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearPhoto() {
+      uploadedPhotoData = "";
+      document.getElementById('mealPhotoInput').value = "";
+      document.getElementById('photoPreviewContainer').classList.add('hidden');
+    }
+
+    function closeMealModal() {
+      document.getElementById('mealModal').classList.add('hidden');
+    }
+
+    function saveMealRecord() {
+      if (!selectedFamilyMember) return;
+      const selectedKey = getFormattedDate(selectedDate);
+      const timeVal = document.getElementById('mealTimeInput').value;
+      const noteVal = document.getElementById('mealNoteInput').value;
+      
+      let keyType = 'morning';
+      if (activeMealType === '夕') keyType = 'evening';
+      if (activeMealType === 'おやつ1') keyType = 'snack1';
+      if (activeMealType === 'おやつ2') keyType = 'snack2';
+      if (activeMealType === 'おやつ3') keyType = 'snack3';
+
+      const payload = {
+        [keyType]: {
+          person: selectedFamilyMember,
+          time: timeVal,
+          note: noteVal,
+          photo: uploadedPhotoData || "",
+          timestamp: new Date().toISOString()
+        }
+      };
+
+      db.collection('meals').doc(selectedKey).set(payload, { merge: true })
+        .then(() => {
+          if (typeof confetti === 'function') {
+            confetti({ particleCount: 40, spread: 60, origin: { y: 0.7 } });
+          }
+          closeMealModal();
+        })
+        .catch(err => alert("エラー: " + err.message));
+    }
+
+    function deleteMealRecord() {
+      const selectedKey = getFormattedDate(selectedDate);
+      let keyType = 'morning';
+      if (activeMealType === '夕') keyType = 'evening';
+      if (activeMealType === 'おやつ1') keyType = 'snack1';
+      if (activeMealType === 'おやつ2') keyType = 'snack2';
+      if (activeMealType === 'おやつ3') keyType = 'snack3';
+
+      db.collection('meals').doc(selectedKey).update({
+        [keyType]: firebase.firestore.FieldValue.delete()
+      }).then(() => closeMealModal()).catch(err => closeMealModal());
+    }
+
+    function renderCalendar() {
+      const year = currentViewDate.getFullYear();
+      const month = currentViewDate.getMonth();
+      const monthTextEl = document.getElementById('calendarMonthText');
+      if (monthTextEl) monthTextEl.innerText = `${year}年 ${month + 1}月`;
+
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const grid = document.getElementById('calendarGrid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      for (let i = 0; i < firstDay; i++) {
+        const empty = document.createElement('div');
+        empty.className = "h-14 bg-gray-50/50 rounded-xl";
+        grid.appendChild(empty);
+      }
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const d = new Date(year, month, day);
+        const dateKey = getFormattedDate(d);
+        const dayData = mealsData[dateKey] || {};
+        const cell = document.createElement('div');
+
+        const isToday = dateKey === getFormattedDate(todayDate);
+        const isSelected = dateKey === getFormattedDate(selectedDate);
+
+        let borderStyle = 'border-amber-100 bg-white';
+        if (isSelected) {
+          borderStyle = 'border-amber-500 bg-amber-100/60 ring-2 ring-amber-400 font-bold';
+        } else if (isToday) {
+          borderStyle = 'border-orange-300 bg-orange-50 font-bold';
+        }
+
+        cell.className = `h-14 border rounded-xl p-1 flex flex-col justify-between transition cursor-pointer hover:bg-amber-50/80 ${borderStyle}`;
+        cell.onclick = () => selectDate(dateKey);
+
+        let iconsHtml = '';
+        if (dayData.morning && dayData.morning.person) {
+          iconsHtml += `<span class="text-[8px] text-amber-600 truncate"><i class="fa-solid fa-sun"></i> ${dayData.morning.person.substring(0, 2)}</span>`;
+        }
+        if (dayData.evening && dayData.evening.person) {
+          iconsHtml += `<span class="text-[8px] text-indigo-500 truncate"><i class="fa-solid fa-moon"></i> ${dayData.evening.person.substring(0, 2)}</span>`;
+        }
+        
+        let snackCount = 0;
+        if (dayData.snack1 && dayData.snack1.person) snackCount++;
+        if (dayData.snack2 && dayData.snack2.person) snackCount++;
+        if (dayData.snack3 && dayData.snack3.person) snackCount++;
+        if (snackCount > 0) {
+          iconsHtml += `<span class="text-[8px] text-pink-500 truncate"><i class="fa-solid fa-cookie-bite"></i> おやつ×${snackCount}</span>`;
+        }
+
+        cell.innerHTML = `
+          <div class="text-[10px] ${d.getDay() === 0 ? 'text-red-400' : d.getDay() === 6 ? 'text-blue-400' : 'text-amber-900'}">${day}</div>
+          <div class="flex flex-col gap-0.5 leading-none overflow-hidden">${iconsHtml}</div>
+        `;
+        grid.appendChild(cell);
+      }
+    }
+
+    function changeMonth(delta) {
+      currentViewDate.setMonth(currentViewDate.getMonth() + delta);
+      renderCalendar();
+    }
+
+    function openFamilyModal() {
+      renderFamilyList();
+      document.getElementById('familyModal').classList.remove('hidden');
+    }
+
+    function closeFamilyModal() {
+      document.getElementById('familyModal').classList.add('hidden');
+    }
+
+    function renderFamilyList() {
+      const list = document.getElementById('familyList');
+      if (!list) return;
+      list.innerHTML = '';
+      familyMembers.forEach((member, index) => {
+        const item = document.createElement('div');
+        item.className = "flex justify-between items-center bg-amber-50 p-2 rounded-xl border border-amber-100 text-xs";
+        item.innerHTML = `
+          <span class="font-bold text-amber-900">${member}</span>
+          <button onclick="removeFamilyMember(${index})" class="text-red-400 hover:text-red-600"><i class="fa-solid fa-trash"></i></button>
+        `;
+        list.appendChild(item);
+      });
+    }
+
+    function addFamilyMember() {
+      const input = document.getElementById('newMemberInput');
+      if (!input) return;
+      const val = input.value.trim();
+      if (!val) return;
+      familyMembers.push(val);
+      input.value = '';
+      db.collection('settings').doc('family').set({ members: familyMembers });
+      renderFamilyList();
+    }
+
+    function removeFamilyMember(index) {
+      if (familyMembers.length <= 1) return;
+      familyMembers.splice(index, 1);
+      db.collection('settings').doc('family').set({ members: familyMembers });
+      renderFamilyList();
+    }
+  </script>
+</body>
+</html>
